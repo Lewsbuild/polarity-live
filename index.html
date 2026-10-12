@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="fil">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Polarity Live</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f1317">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one screen, top to bottom: start button, two lamps, input level, waveform, status. Blue = plus, orange = minus. */
+:root {
+  color-scheme: light;
+  --bg: #e8ebee; --surface: #f6f7f8; --ink: #11161b; --muted: #56616b; --line: #c7ced4;
+  --plus: #0a5fc2; --on-plus: #ffffff;
+  --scope-bg: #0e1317; --scope-grid: #27313a; --scope-ink: #a9b4be;
+  --trace-plus: #4da3ff; --trace-minus: #ff8a5c;
+  --ok: #0f7a3d; --on-ok: #ffffff; --ok-lit: #22c55e; --ok-off: #cfe5d8;
+  --bad: #c62828; --on-bad: #ffffff; --bad-lit: #ff3b30; --bad-off: #f1d3d0;
+  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0f1317; --surface: #171c22; --ink: #e7ebee; --muted: #97a3ae; --line: #2a323a;
+    --plus: #5aa7ff; --on-plus: #0f1317; --scope-bg: #080b0e;
+    --ok: #3ddc84; --on-ok: #0f1317; --ok-lit: #4ade80; --ok-off: #1b3527;
+    --bad: #ff7066; --on-bad: #0f1317; --bad-lit: #ff4d3f; --bad-off: #3d2220;
+  }
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 16px/1.5 var(--font-body);
+  padding-inline: 16px;
+  padding-block: max(16px, env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 640px; margin-inline: auto; display: grid; gap: 16px; }
+h1 { margin: 0; font: 700 clamp(2rem, 8vw, 2.8rem)/1 var(--font-display); letter-spacing: .03em; text-transform: uppercase; }
+p { margin: 0; max-width: 65ch; }
+.lead, .muted { color: var(--muted); }
+.small { font-size: .875rem; }
+.lab { font: 500 12px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+.btn {
+  font: 700 22px/1 var(--font-display);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  min-height: 60px;
+  padding: 0 20px;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--bg);
+  cursor: pointer;
+}
+.btn[aria-pressed="true"] { background: transparent; color: var(--ink); }
+.btn:focus-visible { outline: 3px solid var(--plus); outline-offset: 2px; }
+
+.lamps { display: flex; flex-wrap: wrap; gap: 10px; }
+.lamp { flex: 1 1 150px; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.bulb { flex: none; width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--line); transition: background-color .15s, box-shadow .15s; }
+.lamp[data-tone="ok"] .bulb { background: var(--ok-off); }
+.lamp[data-tone="bad"] .bulb { background: var(--bad-off); }
+.lamp[data-tone="ok"][data-lit="true"] .bulb { background: var(--ok-lit); border-color: var(--ok-lit); box-shadow: 0 0 24px 6px var(--ok-lit); }
+.lamp[data-tone="bad"][data-lit="true"] .bulb { background: var(--bad-lit); border-color: var(--bad-lit); box-shadow: 0 0 24px 6px var(--bad-lit); }
+.lamp b { display: block; font: 700 1.6rem/1 var(--font-display); letter-spacing: .05em; text-transform: uppercase; }
+.lamp small { display: block; margin-top: 2px; color: var(--muted); font: 500 12px var(--font-mono); letter-spacing: .06em; }
+
+.meter { display: grid; gap: 6px; }
+.track { height: 12px; border-radius: 6px; background: var(--scope-bg); overflow: hidden; border: 1px solid var(--line); }
+#meterFill { height: 100%; width: 0%; background: var(--trace-plus); transition: width .12s linear; }
+
+canvas { display: block; width: 100%; max-width: 100%; height: 130px; border-radius: 4px; background: var(--scope-bg); }
+.result { min-height: 3em; }
+.pill { display: inline-block; margin-right: 8px; padding: 3px 10px; border-radius: 4px; background: var(--ink); color: var(--bg); font: 700 14px/1.3 var(--font-display); letter-spacing: .08em; text-transform: uppercase; }
+.pill[data-tone="ok"] { background: var(--ok); color: var(--on-ok); }
+.pill[data-tone="bad"] { background: var(--bad); color: var(--on-bad); }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header style="display:grid;gap:8px">
+    <h1>Polarity Live</h1>
+    <p class="lead">Live na green o red habang tumutugtog ang Speaker Polarity Check. Ilapit ang mic ng phone sa speaker.</p>
+  </header>
+
+  <button id="start" class="btn" type="button" aria-pressed="false">Buksan ang mic</button>
+
+  <div class="lamps">
+    <div class="lamp" id="lampOk" data-tone="ok" data-lit="false"><span class="bulb" aria-hidden="true"></span><span><b>Tama</b><small>in phase</small></span></div>
+    <div class="lamp" id="lampBad" data-tone="bad" data-lit="false"><span class="bulb" aria-hidden="true"></span><span><b>Baligtad</b><small>out of phase</small></span></div>
+  </div>
+
+  <p id="status" class="result" aria-live="polite">Pindutin ang Buksan ang mic, tapos i-play ang test tone.</p>
+
+  <div class="meter">
+    <span class="lab">Input level</span>
+    <div class="track"><div id="meterFill"></div></div>
+  </div>
+
+  <canvas id="scope" role="img" aria-label="Waveform ng huling 6 segundo at mga pulse na natukoy."></canvas>
+
+  <p class="muted small">Basahin ang huling 6 segundo, kaya mga 3 hanggang 6 segundo bago magbago ang ilaw pagkatapos mong ayusin ang wiring. Mas mahalaga na magkapareho ng kulay ang dalawang speaker. Kung pareho silang pula, magkapareho pa rin sila.</p>
+  <p class="muted small">Kung nasa ibang app ang video, ilagay ito sa split screen o gumamit ng ibang device para i-play ito. Kapag na-background ang Chrome, humihinto ang mic.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+
+
+  // Finds the click in each second of audio and reads whether its first big swing goes up (+) or down (-).
+  function analyze(x, sr) {
+    var n = x.length, i, j;
+    var y = new Float32Array(n);
+    var rc = 1 / (2 * Math.PI * 20), dt = 1 / sr, a = rc / (rc + dt), py = 0, px = 0;
+    for (i = 0; i < n; i++) { py = a * (py + x[i] - px); px = x[i]; y[i] = py; }
+    var mx = 0;
+    for (i = 0; i < n; i++) { var v = Math.abs(y[i]); if (v > mx) mx = v; }
+    if (mx < 0.004) return { status: 'quiet', pulses: [], pos: 0, neg: 0, peak: mx, y: y };
+    var bl = Math.max(1, Math.floor(sr * 0.02)), maxes = [];
+    for (i = 0; i + bl <= n; i += bl) {
+      var m = 0;
+      for (j = i; j < i + bl; j++) { var u = Math.abs(y[j]); if (u > m) m = u; }
+      maxes.push(m);
+    }
+    maxes.sort(function (p, q) { return p - q; });
+    var med = maxes.length ? maxes[Math.floor(maxes.length / 2)] : 0;
+    var thr = Math.max(0.3 * mx, 4 * med);
+    var win = Math.max(2, Math.floor(sr * 0.008)), refr = Math.floor(sr * 0.5);
+    var pulses = [], pos = 0, neg = 0;
+    i = 0;
+    while (i < n) {
+      if (Math.abs(y[i]) >= thr) {
+        var end = Math.min(n, i + win), wmax = 0;
+        for (j = i; j < end; j++) { var w2 = Math.abs(y[j]); if (w2 > wmax) wmax = w2; }
+        var pk = i;
+        for (j = i; j < end; j++) {
+          if (Math.abs(y[j]) >= 0.6 * wmax) {
+            var k = j;
+            while (k + 1 < end && Math.abs(y[k + 1]) >= Math.abs(y[k]) && (y[k + 1] > 0) === (y[j] > 0)) k++;
+            pk = k;
+            break;
+          }
+        }
+        var s = y[pk] >= 0 ? 1 : -1;
+        pulses.push({ t: i / sr, s: s, a: Math.abs(y[pk]) });
+        if (s > 0) pos++; else neg++;
+        i += refr;
+      } else {
+        i++;
+      }
+    }
+    var status;
+    if (pulses.length < 3) status = 'few';
+    else if (pos > neg) status = 'ok';
+    else if (neg > pos) status = 'flip';
+    else status = 'unsure';
+    return { status: status, pulses: pulses, pos: pos, neg: neg, peak: mx, y: y };
+  }
+  
+
+  var WIN_SEC = 6;
+  var ctx = null, stream = null, proc = null, mute = null, ring = null, wpos = 0, filled = 0;
+  var sr = 48000, timer = 0, wake = null, peakNow = 0, rec = null;
+
+  function msg(pill, tone, text) {
+    var el = $('status');
+    el.textContent = '';
+    var p = document.createElement('span');
+    p.className = 'pill';
+    p.setAttribute('data-tone', tone);
+    p.textContent = pill;
+    el.appendChild(p);
+    el.appendChild(document.createTextNode(text));
+  }
+  function lamps(st) {
+    $('lampOk').setAttribute('data-lit', String(st === 'ok'));
+    $('lampBad').setAttribute('data-lit', String(st === 'flip'));
+  }
+
+  function envelope(y, cols) {
+    var n = y.length, mn = new Float32Array(cols), mxv = new Float32Array(cols), c, i;
+    for (c = 0; c < cols; c++) {
+      var i0 = Math.floor(c * n / cols), i1 = Math.max(i0 + 1, Math.floor((c + 1) * n / cols)), lo = 0, hi = 0;
+      for (i = i0; i < i1 && i < n; i++) { if (y[i] < lo) lo = y[i]; if (y[i] > hi) hi = y[i]; }
+      mn[c] = lo; mxv[c] = hi;
+    }
+    return { mn: mn, mx: mxv, cols: cols };
+  }
+
+  function drawScope() {
+    var cv = $('scope'), dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight, c, i;
+    if (!w || !h) return;
+    var W = Math.round(w * dpr), H = Math.round(h * dpr);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    var g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var cs = getComputedStyle(document.documentElement);
+    var col = function (n) { return cs.getPropertyValue(n).trim(); };
+    g.globalAlpha = 1;
+    g.fillStyle = col('--scope-bg');
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = col('--scope-grid');
+    g.lineWidth = 1;
+    for (c = 1; c < 6; c++) {
+      var gx = Math.round(c * w / 6) + 0.5;
+      g.beginPath(); g.moveTo(gx, 0); g.lineTo(gx, h); g.stroke();
+    }
+    g.beginPath(); g.moveTo(0, h / 2 + 0.5); g.lineTo(w, h / 2 + 0.5); g.stroke();
+    g.font = "500 12px 'IBM Plex Mono', ui-monospace, monospace";
+    g.textBaseline = 'top';
+    if (!rec) {
+      g.fillStyle = col('--scope-ink');
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText('Walang signal pa', w / 2, h / 2);
+      return;
+    }
+    g.textAlign = 'left';
+    var e = rec.env, cy = h / 2, sc = (h * 0.4) / Math.max(rec.res.peak, 1e-6);
+    g.strokeStyle = col('--scope-ink');
+    g.globalAlpha = 0.85;
+    g.lineWidth = Math.max(1, w / e.cols);
+    g.beginPath();
+    for (c = 0; c < e.cols; c++) {
+      var x = (c + 0.5) * w / e.cols;
+      var top = cy - e.mx[c] * sc, bot = cy - e.mn[c] * sc;
+      if (bot - top < 1) { top -= 0.5; bot += 0.5; }
+      g.moveTo(x, top); g.lineTo(x, bot);
+    }
+    g.stroke();
+    g.globalAlpha = 1;
+    g.lineWidth = 1.5;
+    var shown = Math.min(rec.res.pulses.length, 40);
+    for (i = 0; i < shown; i++) {
+      var p = rec.res.pulses[i], px = p.t / rec.dur * w;
+      g.strokeStyle = p.s > 0 ? col('--trace-plus') : col('--trace-minus');
+      g.fillStyle = g.strokeStyle;
+      g.beginPath(); g.moveTo(px, 16); g.lineTo(px, h); g.stroke();
+      g.fillText(p.s > 0 ? '+' : '−', Math.min(px + 4, w - 12), 2);
+    }
+  }
+
+  var live = {
+    ok: ['Tama', 'ok', 'In phase. Mas marami ang positibong pulse, tugma sa test tone.'],
+    flip: ['Baligtad', 'bad', 'Baligtad. Mas marami ang negatibong pulse, kabaligtaran ng test tone.'],
+    few: ['Naghihintay', 'ink', 'Kulang pa ang pulse. I-play ang Speaker Polarity Check at ilapit ang mic sa speaker.'],
+    unsure: ['Hindi malinaw', 'ink', 'Hindi malinaw ang polarity. Ilapit ang mic at bawasan ang ingay sa paligid.'],
+    quiet: ['Tahimik', 'ink', 'Halos walang tunog. Ilapit ang phone sa speaker at taasan ang volume.']
+  };
+
+  function tick() {
+    var db = peakNow > 0 ? 20 * Math.log10(peakNow) : -90;
+    peakNow = 0;
+    $('meterFill').style.width = Math.max(0, Math.min(100, (db + 60) / 60 * 100)) + '%';
+    if (filled < sr * 2) { msg('Nakikinig', 'ink', 'Maghintay ng ilang segundo.'); return; }
+    var len = Math.min(filled, ring.length), out = new Float32Array(len), i;
+    var start = (wpos - len + ring.length) % ring.length;
+    for (i = 0; i < len; i++) out[i] = ring[(start + i) % ring.length];
+    var res = analyze(out, sr);
+    rec = { res: res, env: envelope(res.y, 600), dur: len / sr };
+    var v = live[res.status];
+    lamps(res.status);
+    msg(v[0], v[1], v[2] + (res.pulses.length ? ' (' + res.pos + ' positibo, ' + res.neg + ' negatibo)' : ''));
+    drawScope();
+  }
+
+  function stop(text) {
+    if (timer) clearInterval(timer);
+    timer = 0;
+    try { if (proc) { proc.onaudioprocess = null; proc.disconnect(); } } catch (e) {}
+    try { if (mute) mute.disconnect(); } catch (e) {}
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    if (ctx) { try { ctx.close(); } catch (e) {} }
+    if (wake && wake.release) { try { wake.release(); } catch (e) {} }
+    ctx = stream = proc = mute = wake = null;
+    rec = null;
+    lamps('none');
+    $('meterFill').style.width = '0%';
+    $('start').textContent = 'Buksan ang mic';
+    $('start').setAttribute('aria-pressed', 'false');
+    msg('Naka-stop', 'ink', text || 'Pindutin ang Buksan ang mic para magsimula ulit.');
+    drawScope();
+  }
+
+  function start() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      msg('Walang mic', 'bad', 'Hindi pinapayagan ng browser ang mic sa pagbukas na ito. Buksan ang file sa Chrome o sa laptop.');
+      return;
+    }
+    msg('Humihingi', 'ink', 'Payagan ang mic kapag lumabas ang tanong.');
+    navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }
+    }).then(function (s) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      stream = s;
+      ctx = new AC();
+      sr = ctx.sampleRate;
+      ring = new Float32Array(Math.round(sr * WIN_SEC));
+      wpos = 0; filled = 0; peakNow = 0;
+      var src = ctx.createMediaStreamSource(s);
+      proc = ctx.createScriptProcessor(2048, 1, 1);
+      mute = ctx.createGain();
+      mute.gain.value = 0;
+      proc.onaudioprocess = function (e) {
+        var d = e.inputBuffer.getChannelData(0), i, a;
+        for (i = 0; i < d.length; i++) {
+          ring[wpos] = d[i];
+          wpos++;
+          if (wpos >= ring.length) wpos = 0;
+          a = d[i] < 0 ? -d[i] : d[i];
+          if (a > peakNow) peakNow = a;
+        }
+        filled = Math.min(ring.length, filled + d.length);
+      };
+      src.connect(proc);
+      proc.connect(mute);
+      mute.connect(ctx.destination);
+      if (ctx.resume) ctx.resume();
+      if (navigator.wakeLock && navigator.wakeLock.request) {
+        navigator.wakeLock.request('screen').then(function (l) { wake = l; }, function () {});
+      }
+      $('start').textContent = 'Stop';
+      $('start').setAttribute('aria-pressed', 'true');
+      msg('Nakikinig', 'ink', 'I-play na ang Speaker Polarity Check.');
+      timer = setInterval(tick, 300);
+    }).catch(function () {
+      msg('Walang mic', 'bad', 'Hindi napayagan ang mic. Payagan ito sa browser, o buksan ang file sa Chrome.');
+    });
+  }
+
+  $('start').addEventListener('click', function () {
+    if (ctx) stop(); else start();
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && ctx) stop('Huminto ang mic dahil umalis ka sa page.');
+  });
+  window.addEventListener('resize', drawScope);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawScope);
+  drawScope();
+})();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./sw.js').catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
